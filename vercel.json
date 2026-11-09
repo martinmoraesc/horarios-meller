@@ -1,0 +1,7 @@
+{
+  "functions": { "api/*.js": { "includeFiles": "{public/rules.js,lib/**}" } },
+  "crons": [
+    { "path": "/api/cron?kind=remind", "schedule": "0 15 * * 4" },
+    { "path": "/api/cron?kind=archive", "schedule": "0 23 * * 0" }
+  ]
+}
