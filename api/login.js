@@ -1,4 +1,5 @@
-import { getCfg, hashPin, sign, safeEq, throttle, clearThrottle, json, body, publicCfg } from '../lib/auth.js';
+import { getCfg, hashPin, sign, safeEq, throttle, clearThrottle, json, body, adminHashOf, validAdminPin } from '../lib/auth.js';
+import { setJSON, logEvent } from '../lib/db.js';
 
 export default async function handler(req, res) {
   try {
@@ -6,11 +7,22 @@ export default async function handler(req, res) {
     const b = await body(req);
     const cfg = await getCfg();
     const pin = String(b.pin || '');
+    const envPin = process.env.ADMIN_PIN;
+    if (b.setup) {
+      // Primera vez: se crea la clave de administrador desde la web.
+      if (cfg.adminHash || envPin) return json(res, 403, { error: 'La clave de administrador ya está creada.' });
+      if (!validAdminPin(pin)) return json(res, 400, { error: 'La clave tiene que tener al menos 6 caracteres.' });
+      if (pin !== String(b.pin2 || '')) return json(res, 400, { error: 'Las dos claves no coinciden.' });
+      cfg.adminHash = adminHashOf(pin);
+      await setJSON('cfg', cfg);
+      await logEvent({ type: 'admin-setup', by: 'Martín' });
+      return json(res, 200, { token: sign({ role: 'admin', name: 'Martín' }), role: 'admin', name: 'Martín' });
+    }
     if (b.admin) {
+      if (!cfg.adminHash && !envPin) return json(res, 409, { needsSetup: true, error: 'Todavía no creaste tu clave de administrador.' });
       if ((await throttle('admin')) > 8) return json(res, 429, { error: 'Demasiados intentos. Probá en 15 minutos.' });
-      const ap = process.env.ADMIN_PIN;
-      if (!ap) return json(res, 500, { error: 'Falta configurar ADMIN_PIN en Vercel.' });
-      if (!safeEq(pin, ap)) return json(res, 401, { error: 'Clave incorrecta.' });
+      const ok = (cfg.adminHash && safeEq(adminHashOf(pin), cfg.adminHash)) || (envPin && safeEq(pin, envPin));
+      if (!ok) return json(res, 401, { error: 'Clave incorrecta.' });
       await clearThrottle('admin');
       return json(res, 200, { token: sign({ role: 'admin', name: 'Martín' }), role: 'admin', name: 'Martín' });
     }

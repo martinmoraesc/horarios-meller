@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { authOf, getCfg, publicCfg, hashPin, json, body } from '../lib/auth.js';
+import { authOf, getCfg, publicCfg, hashPin, json, body, adminHashOf, validAdminPin, validStaffPin } from '../lib/auth.js';
 import { cmd, setJSON, hgetall, hsetJSON, getLog, logEvent } from '../lib/db.js';
 import { weekSummary, weekCsv, sendMail } from '../lib/mail.js';
 import { isMonday, addDays } from '../public/rules.js';
@@ -28,16 +28,24 @@ export default async function handler(req, res) {
     switch (b.action) {
       case 'cfg': return json(res, 200, { cfg: publicCfg(cfg), hasPin: Object.fromEntries(Object.keys(cfg.people).map((n) => [n, !!cfg.pins[n]])) });
       case 'saveCfg': {
-        const next = { ...b.cfg, pins: cfg.pins };
+        const next = { ...b.cfg, pins: cfg.pins, adminHash: cfg.adminHash };
         validateCfg(next);
         for (const n of Object.keys(next.pins)) if (!next.people[n]) delete next.pins[n];
         await setJSON('cfg', next);
         await logEvent({ type: 'cfg', by: me.name });
         return json(res, 200, { ok: true });
       }
+      case 'setAdminPin': {
+        if (!validAdminPin(b.pin)) return json(res, 400, { error: 'La clave tiene que tener al menos 6 caracteres.' });
+        cfg.adminHash = adminHashOf(b.pin);
+        await setJSON('cfg', cfg);
+        await logEvent({ type: 'admin-pin', by: me.name });
+        return json(res, 200, { ok: true });
+      }
       case 'genPin': {
         if (!cfg.people[b.name]) return json(res, 404, { error: 'No existe' });
-        const pin = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+        if (b.pin !== undefined && !validStaffPin(b.pin)) return json(res, 400, { error: 'El PIN tiene que ser de 4 números.' });
+        const pin = b.pin !== undefined ? String(b.pin) : String(crypto.randomInt(0, 10000)).padStart(4, '0');
         cfg.pins[b.name] = hashPin(b.name, pin);
         await setJSON('cfg', cfg);
         await logEvent({ type: 'pin', name: b.name, by: me.name });

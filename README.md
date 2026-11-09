@@ -8,13 +8,14 @@ Web para que el equipo de La Barra y Kul cargue sus horarios semana a semana. El
 2. En vercel.com: **Add New > Project**, elegí el repo y **Deploy**. No hace falta configurar nada de build.
 3. En el proyecto: **Storage > Create > Upstash Redis** (Marketplace, plan gratis) y conectalo al proyecto. Vercel agrega solo las variables `KV_REST_API_URL` y `KV_REST_API_TOKEN`.
 4. En **Settings > Environment Variables** cargá:
-   - `ADMIN_PIN`: tu clave de administrador (la que vas a usar vos).
    - `APP_SECRET`: un texto largo al azar (firma las sesiones).
    - `CRON_SECRET`: otro texto largo al azar (protege los envíos automáticos).
    - `RESEND_API_KEY`: clave de resend.com (gratis). Con el remitente de prueba solo se puede mandar a tu mail, que es lo que necesitamos.
    - `MAIL_TO`: martinmoraesc@gmail.com
 5. **Redeploy** (Deployments > ... > Redeploy).
-6. Entrá a la web, tocá "Soy Martín", y en **Equipo** generá el PIN de cada uno y mandáselo por WhatsApp.
+6. Entrá a la web y tocá "Soy Martín": la primera vez te pide crear tu clave de administrador (mínimo 6 caracteres). Hacelo enseguida, antes de pasar el link a nadie. Después, en **Equipo**, creá el PIN de cada uno (lo escribís vos o se genera al azar) y mandáselo por WhatsApp.
+
+Todas las claves se manejan desde la web: vos cambiás la tuya en **Equipo → Cambiar mi clave**, y cada persona puede cambiar su PIN con el botón "Cambiar PIN". Si algún día perdés tu clave, podés cargar `ADMIN_PIN` en Vercel (opcional) para entrar y crear otra.
 
 ## Cómo funciona
 

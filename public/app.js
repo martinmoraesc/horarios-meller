@@ -30,20 +30,69 @@ function toast(msg) {
 }
 function logout() { S.token = S.role = S.name = null; S.data = null; S.entry = null; S.who = null; try { localStorage.removeItem('hm'); } catch {} render(); }
 
+/* ---------- Ventanas ---------- */
+function modal(html) {
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="card">${html}</div>`;
+  m.addEventListener('click', (e) => { if (e.target === m || e.target.dataset.close) m.remove(); });
+  document.body.appendChild(m);
+  const f = m.querySelector('input'); if (f) f.focus();
+  return m;
+}
+function changeOwnPin() {
+  const m = modal(`<h2>Cambiar mi PIN</h2>
+    <div class="field" style="margin-top:10px"><label for="op">PIN actual</label><input id="op" type="password" inputmode="numeric" maxlength="4" class="pin"></div>
+    <div class="field"><label for="np">PIN nuevo (4 números)</label><input id="np" type="password" inputmode="numeric" maxlength="4" class="pin"></div>
+    <p id="me" class="small" style="color:var(--bad);min-height:20px"></p>
+    <div class="row"><button class="btn pri" id="ok" style="flex:1">Guardar</button><button class="btn" data-close="1">Cancelar</button></div>`);
+  m.querySelector('#ok').onclick = async () => {
+    try { await api('/api/account', { body: { oldPin: m.querySelector('#op').value, newPin: m.querySelector('#np').value } }); m.remove(); toast('PIN cambiado.'); }
+    catch (e) { m.querySelector('#me').textContent = e.message; }
+  };
+}
+function askStaffPin(name, had) {
+  const m = modal(`<h2>PIN de ${esc(name)}</h2>
+    <p class="small mut" style="margin:4px 0 10px">Escribí uno de 4 números o dejá que el sistema genere uno al azar.</p>
+    <div class="field"><label for="sp">PIN (4 números)</label><input id="sp" type="text" inputmode="numeric" maxlength="4" class="pin" autocomplete="off"></div>
+    <p id="me" class="small" style="color:var(--bad);min-height:20px"></p>
+    <div class="row"><button class="btn pri" id="ok" style="flex:1">Guardar</button><button class="btn" id="rnd">Al azar</button><button class="btn" data-close="1">Cancelar</button></div>`);
+  const send = async (pin) => {
+    try { const r = await api('/api/admin', { body: { action: 'genPin', name, ...(pin ? { pin } : {}) } }); m.remove(); adminCfgDraft = null; pinModal(name, r.pin); render(); }
+    catch (e) { m.querySelector('#me').textContent = e.message; }
+  };
+  m.querySelector('#ok').onclick = () => send(m.querySelector('#sp').value);
+  m.querySelector('#rnd').onclick = () => send(null);
+}
+function changeAdminPin() {
+  const m = modal(`<h2>Tu clave de administrador</h2>
+    <div class="field" style="margin-top:10px"><label for="a1">Clave nueva (mínimo 6 caracteres)</label><input id="a1" type="password" autocomplete="new-password"></div>
+    <div class="field"><label for="a2">Repetí la clave</label><input id="a2" type="password" autocomplete="new-password"></div>
+    <p id="me" class="small" style="color:var(--bad);min-height:20px"></p>
+    <div class="row"><button class="btn pri" id="ok" style="flex:1">Guardar</button><button class="btn" data-close="1">Cancelar</button></div>`);
+  m.querySelector('#ok').onclick = async () => {
+    const a = m.querySelector('#a1').value;
+    if (a !== m.querySelector('#a2').value) return (m.querySelector('#me').textContent = 'Las dos claves no coinciden.');
+    try { await api('/api/admin', { body: { action: 'setAdminPin', pin: a } }); m.remove(); toast('Clave cambiada.'); }
+    catch (e) { m.querySelector('#me').textContent = e.message; }
+  };
+}
+
 /* ---------- Ingreso ---------- */
 async function loginView() {
-  let names = [], hasPin = {};
-  try { ({ names, hasPin } = await api('/api/people')); } catch (e) { app.innerHTML = `<div class="card"><h2>No se pudo cargar</h2><p class="mut">${esc(e.message)}</p></div>`; return; }
+  let names = [], hasPin = {}, adminSet = true;
+  try { ({ names, hasPin, adminSet } = await api('/api/people')); } catch (e) { app.innerHTML = `<div class="card"><h2>No se pudo cargar</h2><p class="mut">${esc(e.message)}</p></div>`; return; }
   let pick = null, admin = false;
   const draw = () => {
     app.innerHTML = `
       <h1>¿Quién sos?</h1><p class="mut" style="margin:6px 0 16px">Elegí tu nombre y poné tu PIN de 4 números.</p>
       <div class="grid names" role="group" aria-label="Personas">${names.map((n) => `<button data-n="${esc(n)}" aria-pressed="${pick === n}">${esc(n)}</button>`).join('')}</div>
       <div class="card" style="margin-top:14px" ${pick || admin ? '' : 'hidden'}>
-        <div class="field"><label for="pin">${admin ? 'Clave de administrador' : 'PIN de ' + esc(pick || '')}</label>
-        <input id="pin" class="${admin ? '' : 'pin'}" type="password" ${admin ? '' : 'inputmode="numeric" maxlength="4"'} autocomplete="current-password"></div>
+        ${admin && !adminSet ? '<p class="small" style="margin-bottom:10px"><b>Primera vez:</b> creá tu clave de administrador (mínimo 6 caracteres). La vas a usar para entrar al panel.</p>' : ''}
+        <div class="field"><label for="pin">${admin ? (adminSet ? 'Clave de administrador' : 'Creá tu clave') : 'PIN de ' + esc(pick || '')}</label>
+        <input id="pin" class="${admin ? '' : 'pin'}" type="password" ${admin ? '' : 'inputmode="numeric" maxlength="4"'} autocomplete="${admin && !adminSet ? 'new-password' : 'current-password'}"></div>
+        ${admin && !adminSet ? '<div class="field"><label for="pin2">Repetí la clave</label><input id="pin2" type="password" autocomplete="new-password"></div>' : ''}
         <p id="err" class="small" style="color:var(--bad);min-height:20px"></p>
-        <button class="btn pri" id="go" style="width:100%">Entrar</button>
+        <button class="btn pri" id="go" style="width:100%">${admin && !adminSet ? 'Crear clave y entrar' : 'Entrar'}</button>
         ${pick && !hasPin[pick] ? '<p class="small mut" style="margin-top:8px">Todavía no tenés PIN: pedíselo a Martín.</p>' : ''}
       </div>
       <p style="margin-top:18px"><button class="btn sm" id="adm">${admin ? 'Volver' : 'Soy Martín (administrador)'}</button></p>`;
@@ -53,7 +102,7 @@ async function loginView() {
   const go = async () => {
     $('#err').textContent = '';
     try {
-      const r = await api('/api/login', { body: admin ? { admin: true, pin: $('#pin').value } : { name: pick, pin: $('#pin').value } });
+      const r = await api('/api/login', { body: admin ? (adminSet ? { admin: true, pin: $('#pin').value } : { setup: true, pin: $('#pin').value, pin2: $('#pin2').value }) : { name: pick, pin: $('#pin').value } });
       Object.assign(S, { token: r.token, role: r.role, name: r.name });
       try { localStorage.setItem('hm', JSON.stringify({ token: r.token, role: r.role, name: r.name })); } catch {}
       S.week = null; S.data = null; S.entry = null; S.who = null; render();
@@ -65,7 +114,7 @@ async function loginView() {
     else if (b.id === 'go') go();
     else if (b.id === 'adm') { admin = !admin; pick = null; draw(); }
   };
-  app.onkeydown = (ev) => { if (ev.key === 'Enter' && ev.target.id === 'pin') go(); };
+  app.onkeydown = (ev) => { if (ev.key === 'Enter' && (ev.target.id === 'pin' || ev.target.id === 'pin2')) go(); };
 }
 
 /* ---------- Datos de la semana ---------- */
@@ -301,10 +350,11 @@ async function adminTeam() {
       <td class="locs">${Object.entries(c.locs).map(([k, v]) => `<label><input type="checkbox" data-f="loc" data-k="${k}" ${p.locs.includes(k) ? 'checked' : ''}>${esc(v.name)}</label>`).join('')}</td>
       <td><input type="date" data-f="from" value="${p.from || ''}"></td>
       <td><input type="number" step="0.5" min="0" max="24" data-f="maxEnd" value="${p.maxEnd ?? ''}" placeholder="—" style="width:80px"></td>
-      <td><button class="btn sm" data-pin="${esc(n)}">${hasPin[n] ? 'Nuevo PIN' : 'Generar PIN'}</button></td>
+      <td><button class="btn sm" data-pin="${esc(n)}">${hasPin[n] ? 'Cambiar PIN' : 'Crear PIN'}</button></td>
       <td><button class="btn sm" data-del="${esc(n)}" aria-label="Quitar ${esc(n)}">Quitar</button></td></tr>`).join('')}
     </tbody></table></div>
-    <div class="row" style="margin-top:12px"><input id="newname" type="text" placeholder="Nombre nuevo" style="max-width:220px"><button class="btn" id="addp">Agregar persona</button><button class="btn pri" id="savecfg">Guardar equipo</button></div></div>`;
+    <div class="row" style="margin-top:12px"><input id="newname" type="text" placeholder="Nombre nuevo" style="max-width:220px"><button class="btn" id="addp">Agregar persona</button><button class="btn pri" id="savecfg">Guardar equipo</button></div></div>
+    <div class="card"><h3>Tu clave de administrador</h3><p class="small mut" style="margin:4px 0 10px">Es la que usás para entrar al panel. Se cambia desde acá, no hace falta tocar Vercel.</p><button class="btn" id="adminpin">Cambiar mi clave</button></div>`;
 }
 async function adminPeriods() {
   const { cfg } = await api('/api/admin?action=cfg');
@@ -351,7 +401,8 @@ async function adminClick(ev) {
       const r = await fetch('/api/export?week=' + S.week, { headers: { authorization: 'Bearer ' + S.token } });
       const b = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `horarios-${S.week}.csv`; a.click(); return;
     }
-    if (el.dataset.pin) { const r = await api('/api/admin', { body: { action: 'genPin', name: el.dataset.pin } }); pinModal(el.dataset.pin, r.pin); adminCfgDraft = null; return; }
+    if (el.dataset.pin) return askStaffPin(el.dataset.pin);
+    if (el.id === 'adminpin') return changeAdminPin();
     if (el.dataset.del) { if (!el.dataset.sure) { el.dataset.sure = 1; el.textContent = '¿Seguro?'; return; } delete adminCfgDraft.people[el.dataset.del]; return render(); }
     if (el.id === 'addp') { const n = $('#newname').value.trim(); if (!n) return; if (adminCfgDraft.people[n]) return toast('Ya existe.'); adminCfgDraft.people[n] = { locs: [Object.keys(adminCfgDraft.locs)[0]], hours: 44 }; return render(); }
     if (el.id === 'savecfg') { readTeam(); await api('/api/admin', { body: { action: 'saveCfg', cfg: adminCfgDraft } }); adminCfgDraft = null; toast('Equipo guardado.'); return render(); }
@@ -375,8 +426,9 @@ function readTeam() {
 /* ---------- Render raíz ---------- */
 async function render() {
   const who = $('#who');
-  who.innerHTML = S.token ? `<span>${esc(S.name)}</span><button id="out">Salir</button>` : '';
+  who.innerHTML = S.token ? `<span>${esc(S.name)}</span>${S.role === 'staff' ? '<button id="chpin">Cambiar PIN</button>' : ''}<button id="out">Salir</button>` : '';
   if (S.token) $('#out').onclick = logout;
+  if ($('#chpin')) $('#chpin').onclick = changeOwnPin;
   app.onclick = app.onchange = app.onkeydown = null;
   if (!S.token) return loginView();
   try {
