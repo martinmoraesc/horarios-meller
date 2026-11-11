@@ -82,9 +82,22 @@ export function availDays(person, week) {
   });
 }
 // Horas que le corresponden esa semana (proporcional si entra o sale a mitad de semana).
-export function targetHours(person, week) {
+// Semanas sin día libre (temporada alta): la etapa que contiene el domingo trae noDayOff.
+export function noDayOffWeek(cfg, loc, week) {
+  if (!cfg || !loc) return false;
+  const p = periodFor(cfg, loc, addDays(week, 6));
+  return !!(p && p.noDayOff);
+}
+// Horas extra por trabajar el día libre: un turno promedio más (queda como descanso a compensar).
+export const restDayHours = (person) => Math.round((person.hours / 6) * 2) / 2;
+export function targetHours(person, week, cfg, loc) {
   const n = availDays(person, week).filter(Boolean).length;
-  return n >= 7 ? person.hours : Math.round((person.hours * n) / 7 * 2) / 2;
+  if (n >= 7) return person.hours + (noDayOffWeek(cfg, loc, week) ? restDayHours(person) : 0);
+  return Math.round((person.hours * n) / 7 * 2) / 2;
+}
+// Descansos semanales trabajados (a pagar o compensar más adelante).
+export function owedRest(cfg, loc, week, entry) {
+  return noDayOffWeek(cfg, loc, week) && entry && entry.days && entry.days.filter(Boolean).length === 7 ? 1 : 0;
 }
 
 export function splitHours(H, D) {
@@ -112,13 +125,14 @@ export function personalErrors(cfg, name, entry, prevSunday, week) {
   if (!entry || !entry.days) return ['Todavía no cargaste tu semana.'];
   const days = entry.days;
   const tot = hoursOf(days);
-  const H = targetHours(person, week);
+  const nodo = noDayOffWeek(cfg, entry.loc, week);
+  const H = targetHours(person, week, cfg, entry.loc);
   const av = availDays(person, week);
   if (Math.abs(tot - H) > 0.01) {
     errs.push(tot < H ? `Te faltan ${fmtH(H - tot)} para llegar a tus ${fmtH(H)} semanales.` : `Te pasaste ${fmtH(tot - H)} de tus ${fmtH(H)} semanales.`);
   }
   const worked = days.filter(Boolean).length;
-  if (worked > R.maxDays || (worked === 7 && av.every(Boolean))) errs.push('Tenés que tener al menos un día libre.');
+  if (!nodo && (worked > R.maxDays || (worked === 7 && av.every(Boolean)))) errs.push('Tenés que tener al menos un día libre.');
   const reqs = weekReq(cfg, entry.loc, week);
   let wk = 0;
   days.forEach((s, d) => {
@@ -167,9 +181,9 @@ export function autoFill(cfg, name, loc, week, entries, prevSunday, keepDays) {
   const reqs = weekReq(cfg, loc, week);
   const have = Array.from({ length: 7 }, (_, d) => haveArr(entries, loc, d, name));
   const av = availDays(person, week);
-  const Ht = targetHours(person, week);
+  const Ht = targetHours(person, week, cfg, loc);
   const nav = av.filter(Boolean).length;
-  const D = Math.min(workDaysFor(person.hours, R), nav >= 7 ? R.maxDays : nav);
+  const D = noDayOffWeek(cfg, loc, week) && nav >= 7 ? 7 : Math.min(workDaysFor(person.hours, R), nav >= 7 ? R.maxDays : nav);
   if (Ht <= 0) return new Array(7).fill(null);
   const lens = splitHours(Ht, D).sort((a, b) => b - a);
   const lenMax = lens[0];
@@ -227,8 +241,8 @@ export function checkConfirm(cfg, name, entry, entries, prevSunday, week) {
   const sug = { ...entry, days: sugDays };
   const best = hardDeficit(cfg, loc, week, { ...entries, [name]: sug });
   // Horas que todavía pueden aportar las personas que no cargaron nada
-  const pending = Object.keys(cfg.people).filter((n) => n !== name && cfg.people[n].locs.includes(loc) && targetHours(cfg.people[n], week) > 0 && !(entries[n] && entries[n].days && entries[n].days.some(Boolean)));
-  const capacity = pending.reduce((a, n) => a + targetHours(cfg.people[n], week), 0);
+  const pending = Object.keys(cfg.people).filter((n) => n !== name && cfg.people[n].locs.includes(loc) && targetHours(cfg.people[n], week, cfg, loc) > 0 && !(entries[n] && entries[n].days && entries[n].days.some(Boolean)));
+  const capacity = pending.reduce((a, n) => a + targetHours(cfg.people[n], week, cfg, loc), 0);
   if (cur > best + 0.01 && cur > capacity + 0.01) {
     return {
       ok: false,

@@ -241,7 +241,8 @@ function renderEditor() {
   if (!S.entry) S.entry = currentEntry();
   const e = S.entry;
   const reqs = R.weekReq(cfg, e.loc, S.week);
-  const tot = R.hoursOf(e.days), H = R.targetHours(person, S.week);
+  const tot = R.hoursOf(e.days), H = R.targetHours(person, S.week, cfg, e.loc);
+  const nodo = R.noDayOffWeek(cfg, e.loc, S.week);
   const pct = H ? Math.min(100, (tot / H) * 100) : 0;
   const errs = S.errors.length ? S.errors : R.personalErrors(cfg, n, e, prevSunday(), S.week);
   const gaps = R.gapsOf(cfg, e.loc, S.week, entriesWithMine());
@@ -255,6 +256,7 @@ function renderEditor() {
       ${locSel}
       <div class="prog" role="progressbar" aria-valuenow="${tot}" aria-valuemax="${H}"><i class="${tot > H + 0.01 ? 'over' : Math.abs(tot - H) < 0.01 ? 'full' : ''}" style="width:${pct}%"></i></div>
       <p class="small"><b class="mono">${fmtH(tot)}</b> de ${fmtH(H)} esta semana</p>
+      ${nodo ? `<div class="alert warn"><b>Temporada alta: esta semana no hay día libre.</b> Trabajás los 7 días; el día de descanso que trabajás queda anotado como <b>descanso a compensar</b> (se paga o te lo tomás más adelante). Por eso tu meta tiene ${fmtH(R.restDayHours(person))} más.</div>` : ''}
       ${showErrs ? `<div class="alert bad"><b>Para confirmar:</b><ul>${errs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
         ${S.suggestion ? '<div class="row" style="margin-top:8px"><button class="btn sm pri" data-a="applysug">Usar la combinación sugerida</button></div>' : ''}
         ${S.canForce ? '<div class="row" style="margin-top:8px"><button class="btn sm" data-a="force">Confirmar igual y avisar a Martín</button></div>' : ''}</div>` : ''}
@@ -281,7 +283,7 @@ function teamView(cfg, loc) {
     ${[0, 1, 2, 3, 4, 5, 6].map((d) => `<section class="card day ${d >= 5 ? 'we' : ''}"><h3><span>${DAYS[d]} ${+addDays(S.week, d).slice(8)}</span></h3>${strip(reqs[d], R.haveArr(all, loc, d), d, null)}</section>`).join('')}`;
 }
 function setShift(d, s) { S.entry.days[d] = s; touch(); renderEditor(); }
-function defaultLen(person) { return Math.min(R.splitHours(R.targetHours(person, S.week) || 7, R.workDaysFor(person.hours, S.data.cfg.rules))[0] || 7, S.data.cfg.rules.maxDay); }
+function defaultLen(person) { const cfg = S.data.cfg, loc = S.entry && S.entry.loc, nodo = R.noDayOffWeek(cfg, loc, S.week); return Math.min(R.splitHours(R.targetHours(person, S.week, cfg, loc) || 7, nodo ? 7 : R.workDaysFor(person.hours, cfg.rules))[0] || 7, cfg.rules.maxDay); }
 
 function editorClick(ev) {
   const el = ev.target.closest('button'); if (!el) return;
@@ -455,7 +457,7 @@ function adminWeek() {
     <div class="field"><label for="aloc">Local</label><select id="aloc">${Object.entries(cfg.locs).map(([k, v]) => `<option value="${k}" ${k === loc ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></div>
     <div class="card"><div class="row sb"><h2>Estado</h2>${gh ? `<span class="pill bad">faltan ${fmtH(gh)}</span>` : '<span class="pill ok">cobertura completa</span>'}</div>
       <div class="scroll"><table><thead><tr><th>Persona</th><th>Estado</th><th>Horas</th><th></th></tr></thead><tbody>
-      ${names.map((n) => { const e = all[n]; const st = statusOf(e); return `<tr><td><b>${esc(n)}</b></td><td>${pill(st, e)}</td><td class="mono">${e && e.loc === loc ? R.hoursOf(e.days) : 0}/${R.targetHours(cfg.people[n], S.week)}</td>
+      ${names.map((n) => { const e = all[n]; const st = statusOf(e); return `<tr><td><b>${esc(n)}</b></td><td>${pill(st, e)}</td><td class="mono">${e && e.loc === loc ? R.hoursOf(e.days) : 0}/${R.targetHours(cfg.people[n], S.week, cfg, loc)}${R.owedRest(cfg, loc, S.week, e) ? ' <span class="pill warn">descanso a compensar</span>' : ''}</td>
         <td><button class="btn sm" data-edit="${esc(n)}">Ver / editar</button> ${st === 'confirmed' ? `<button class="btn sm" data-lock="${esc(n)}" data-to="locked">Cerrar</button>` : ''}${st === 'locked' ? `<button class="btn sm" data-lock="${esc(n)}" data-to="draft">Reabrir</button>` : ''}</td></tr>`; }).join('')}
       </tbody></table></div></div>
     ${gaps.length ? `<div class="card"><h3>Lo que falta cubrir</h3><ul style="margin:6px 0 0;padding-left:18px">${gaps.map((g) => `<li>${DAYS[g.dow]} ${fmt(g.from)}–${fmt(g.to)}: falta${g.missing > 1 ? 'n' : ''} ${g.missing}</li>`).join('')}</ul></div>` : ''}
