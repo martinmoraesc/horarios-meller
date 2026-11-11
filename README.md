@@ -19,6 +19,10 @@ Todas las claves se manejan desde la web: vos cambiás la tuya en **Equipo → C
 
 ## Cómo funciona
 
+- **Hoy** es la solapa que se abre por defecto: quién trabaja hoy en cada local, quién está ahora, si el día está cubierto y un formulario para registrar horas extra.
+- **Pantalla general del local:** en Panel → Equipo creás un código. Lo escribís una vez en la tablet o PC del local y queda abierta mostrando el día (se actualiza sola cada 5 minutos). Ahí cada uno registra sus horas extra con su nombre y PIN; no se pueden cambiar horarios.
+- **Horas extra:** quedan pendientes hasta que las aprobás o rechazás en Panel → Horas extra. Salen en el mail semanal y en el CSV (tipo "hora extra").
+
 - Cada persona entra con su nombre y PIN de 4 números, elige día libre, entrada y salida, y ve en cada día cuánta gente falta (rojo) y un botón "Cubrir lo que falta".
 - No puede confirmar si: no llega a sus horas semanales, no tiene día libre, no respeta las 12 h de descanso, sale más tarde de lo permitido o no trabaja ningún fin de semana.
 - Tampoco puede confirmar si su horario deja sin cubrir más de lo que el resto del equipo puede completar. En ese caso se le propone una combinación sugerida; si no puede cumplirla, "Confirmar igual y avisar a Martín" deja marcada la semana.

@@ -26,13 +26,20 @@ export default async function handler(req, res) {
     const b = req.method === 'POST' ? await body(req) : req.query || {};
     const cfg = await getCfg();
     switch (b.action) {
-      case 'cfg': return json(res, 200, { cfg: publicCfg(cfg), hasPin: Object.fromEntries(Object.keys(cfg.people).map((n) => [n, !!cfg.pins[n]])) });
+      case 'cfg': return json(res, 200, { teamSet: !!cfg.teamHash, cfg: publicCfg(cfg), hasPin: Object.fromEntries(Object.keys(cfg.people).map((n) => [n, !!cfg.pins[n]])) });
       case 'saveCfg': {
-        const next = { ...b.cfg, pins: cfg.pins, adminHash: cfg.adminHash };
+        const next = { ...b.cfg, pins: cfg.pins, adminHash: cfg.adminHash, teamHash: cfg.teamHash };
         validateCfg(next);
         for (const n of Object.keys(next.pins)) if (!next.people[n]) delete next.pins[n];
         await setJSON('cfg', next);
         await logEvent({ type: 'cfg', by: me.name });
+        return json(res, 200, { ok: true });
+      }
+      case 'setTeamCode': {
+        if (typeof b.code !== 'string' || b.code.length < 4 || b.code.length > 64) return json(res, 400, { error: 'El código tiene que tener al menos 4 caracteres.' });
+        cfg.teamHash = hashPin('__team__', b.code);
+        await setJSON('cfg', cfg);
+        await logEvent({ type: 'team-code', by: me.name });
         return json(res, 200, { ok: true });
       }
       case 'setAdminPin': {
@@ -65,8 +72,8 @@ export default async function handler(req, res) {
       case 'sendMail': {
         if (!isMonday(b.week)) return json(res, 400, { error: 'Semana inválida' });
         const entries = await hgetall('week:' + b.week);
-        const s = weekSummary(cfg, b.week, entries);
-        await sendMail({ subject: `Horarios semana del ${b.week.slice(8)}/${b.week.slice(5, 7)}`, html: s.html, text: s.text, csv: weekCsv(cfg, b.week, entries), csvName: `horarios-${b.week}.csv` });
+        const s = weekSummary(cfg, b.week, entries, Object.values(await hgetall('extra:' + b.week)));
+        await sendMail({ subject: `Horarios semana del ${b.week.slice(8)}/${b.week.slice(5, 7)}`, html: s.html, text: s.text, csv: weekCsv(cfg, b.week, entries, Object.values(await hgetall('extra:' + b.week))), csvName: `horarios-${b.week}.csv` });
         return json(res, 200, { ok: true });
       }
       default: return json(res, 400, { error: 'Acción desconocida' });

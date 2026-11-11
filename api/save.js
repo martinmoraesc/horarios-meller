@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   try {
     const me = authOf(req);
     if (!me) return json(res, 401, { error: 'Sesión vencida' });
+    if (me.role === 'team') return json(res, 403, { error: 'Desde la pantalla general no se cargan horarios. Entrá con tu nombre y PIN.' });
     if (req.method !== 'POST') return json(res, 405, { error: 'Método no permitido' });
     const b = await body(req);
     const name = me.role === 'admin' && b.name ? b.name : me.name;

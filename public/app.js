@@ -7,7 +7,7 @@ const app = $('#app');
 
 const S = {
   token: null, role: null, name: null,
-  week: null, data: null, loc: null, tab: 'mine', atab: 'week',
+  week: null, data: null, loc: null, tab: 'today', atab: 'week', td: null,
   who: null, // persona que se está editando (el admin puede editar a otros)
   entry: null, dirty: false, saving: false, errors: [], suggestion: null, canForce: false,
 };
@@ -28,7 +28,7 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 3200);
 }
-function logout() { S.token = S.role = S.name = null; S.data = null; S.entry = null; S.who = null; try { localStorage.removeItem('hm'); } catch {} render(); }
+function logout() { S.token = S.role = S.name = null; S.data = null; S.td = null; S.tab = 'today'; S.entry = null; S.who = null; try { localStorage.removeItem('hm'); } catch {} render(); }
 
 /* ---------- Ventanas ---------- */
 function modal(html) {
@@ -63,6 +63,17 @@ function askStaffPin(name, had) {
   m.querySelector('#ok').onclick = () => send(m.querySelector('#sp').value);
   m.querySelector('#rnd').onclick = () => send(null);
 }
+function setTeamCode() {
+  const m = modal(`<h2>Código de la pantalla general</h2>
+    <p class="small mut" style="margin:4px 0 10px">Lo escribís una vez en la tablet o PC del local y queda abierta (120 días). Al cambiarlo, las pantallas abiertas siguen funcionando hasta que se cierre la sesión.</p>
+    <div class="field"><label for="tc">Código (mínimo 4 caracteres)</label><input id="tc" type="text" autocomplete="off"></div>
+    <p id="me" class="small" style="color:var(--bad);min-height:20px"></p>
+    <div class="row"><button class="btn pri" id="ok" style="flex:1">Guardar</button><button class="btn" data-close="1">Cancelar</button></div>`);
+  m.querySelector('#ok').onclick = async () => {
+    try { await api('/api/admin', { body: { action: 'setTeamCode', code: m.querySelector('#tc').value } }); m.remove(); toast('Código guardado.'); render(); }
+    catch (e) { m.querySelector('#me').textContent = e.message; }
+  };
+}
 function changeAdminPin() {
   const m = modal(`<h2>Tu clave de administrador</h2>
     <div class="field" style="margin-top:10px"><label for="a1">Clave nueva (mínimo 6 caracteres)</label><input id="a1" type="password" autocomplete="new-password"></div>
@@ -81,28 +92,28 @@ function changeAdminPin() {
 async function loginView() {
   let names = [], hasPin = {}, adminSet = true;
   try { ({ names, hasPin, adminSet } = await api('/api/people')); } catch (e) { app.innerHTML = `<div class="card"><h2>No se pudo cargar</h2><p class="mut">${esc(e.message)}</p></div>`; return; }
-  let pick = null, admin = false;
+  let pick = null, admin = false, team = false;
   const draw = () => {
     app.innerHTML = `
       <h1>¿Quién sos?</h1><p class="mut" style="margin:6px 0 16px">Elegí tu nombre y poné tu PIN de 4 números.</p>
       <div class="grid names" role="group" aria-label="Personas">${names.map((n) => `<button data-n="${esc(n)}" aria-pressed="${pick === n}">${esc(n)}</button>`).join('')}</div>
-      <div class="card" style="margin-top:14px" ${pick || admin ? '' : 'hidden'}>
+      <div class="card" style="margin-top:14px" ${pick || admin || team ? '' : 'hidden'}>
         ${admin && !adminSet ? '<p class="small" style="margin-bottom:10px"><b>Primera vez:</b> creá tu clave de administrador (mínimo 6 caracteres). La vas a usar para entrar al panel.</p>' : ''}
-        <div class="field"><label for="pin">${admin ? (adminSet ? 'Clave de administrador' : 'Creá tu clave') : 'PIN de ' + esc(pick || '')}</label>
-        <input id="pin" class="${admin ? '' : 'pin'}" type="password" ${admin ? '' : 'inputmode="numeric" maxlength="4"'} autocomplete="${admin && !adminSet ? 'new-password' : 'current-password'}"></div>
+        <div class="field"><label for="pin">${team ? 'Código del equipo' : admin ? (adminSet ? 'Clave de administrador' : 'Creá tu clave') : 'PIN de ' + esc(pick || '')}</label>
+        <input id="pin" class="${admin || team ? '' : 'pin'}" type="password" ${admin || team ? '' : 'inputmode="numeric" maxlength="4"'} autocomplete="${admin && !adminSet ? 'new-password' : 'current-password'}"></div>
         ${admin && !adminSet ? '<div class="field"><label for="pin2">Repetí la clave</label><input id="pin2" type="password" autocomplete="new-password"></div>' : ''}
         <p id="err" class="small" style="color:var(--bad);min-height:20px"></p>
         <button class="btn pri" id="go" style="width:100%">${admin && !adminSet ? 'Crear clave y entrar' : 'Entrar'}</button>
         ${pick && !hasPin[pick] ? '<p class="small mut" style="margin-top:8px">Todavía no tenés PIN: pedíselo a Martín.</p>' : ''}
       </div>
-      <p style="margin-top:18px"><button class="btn sm" id="adm">${admin ? 'Volver' : 'Soy Martín (administrador)'}</button></p>`;
+      <div class="row" style="margin-top:18px"><button class="btn sm" id="tm">${team ? 'Volver' : 'Pantalla general del local'}</button><button class="btn sm" id="adm">${admin ? 'Volver' : 'Soy Martín (administrador)'}</button></div>`;
     $('#pin') && ($('#pin').focus());
   };
   draw();
   const go = async () => {
     $('#err').textContent = '';
     try {
-      const r = await api('/api/login', { body: admin ? (adminSet ? { admin: true, pin: $('#pin').value } : { setup: true, pin: $('#pin').value, pin2: $('#pin2').value }) : { name: pick, pin: $('#pin').value } });
+      const r = await api('/api/login', { body: team ? { team: true, pin: $('#pin').value } : admin ? (adminSet ? { admin: true, pin: $('#pin').value } : { setup: true, pin: $('#pin').value, pin2: $('#pin2').value }) : { name: pick, pin: $('#pin').value } });
       Object.assign(S, { token: r.token, role: r.role, name: r.name });
       try { localStorage.setItem('hm', JSON.stringify({ token: r.token, role: r.role, name: r.name })); } catch {}
       S.week = null; S.data = null; S.entry = null; S.who = null; render();
@@ -110,9 +121,10 @@ async function loginView() {
   };
   app.onclick = (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.n) { pick = b.dataset.n; admin = false; draw(); }
+    if (b.dataset.n) { pick = b.dataset.n; admin = false; team = false; draw(); }
+    else if (b.id === 'tm') { team = !team; admin = false; pick = null; draw(); }
     else if (b.id === 'go') go();
-    else if (b.id === 'adm') { admin = !admin; pick = null; draw(); }
+    else if (b.id === 'adm') { admin = !admin; team = false; pick = null; draw(); }
   };
   app.onkeydown = (ev) => { if (ev.key === 'Enter' && (ev.target.id === 'pin' || ev.target.id === 'pin2')) go(); };
 }
@@ -252,7 +264,7 @@ function renderEditor() {
     ${[0, 1, 2, 3, 4, 5, 6].map((d) => dayCard(d, reqs, cfg, person)).join('')}`;
   app.innerHTML = `${S.role === 'admin' ? '<p style="margin-bottom:10px"><button class="btn sm" data-go="back">‹ Volver al panel</button></p>' : ''}
     ${weekNav()}
-    <div class="tabs"><button data-t="mine" aria-selected="${S.tab === 'mine'}">Mi semana</button><button data-t="team" aria-selected="${S.tab === 'team'}">Todo el equipo</button></div>
+    <div class="tabs">${S.role === 'staff' ? `<button data-t="today" aria-selected="false">Hoy</button>` : ''}<button data-t="mine" aria-selected="${S.tab === 'mine'}">Mi semana</button><button data-t="team" aria-selected="${S.tab === 'team'}">Todo el equipo</button></div>
     ${body}
     ${S.tab === 'mine' ? `<div class="bar"><div class="bar-in"><button class="btn" data-a="suggest">Sugerime mi semana</button><button class="btn pri" data-a="confirm" ${e.status === 'confirmed' && !S.dirty ? 'disabled' : ''}>${e.status === 'confirmed' ? 'Confirmada' : 'Confirmar semana'}</button></div></div>` : ''}`;
 }
@@ -275,7 +287,7 @@ function editorClick(ev) {
   const el = ev.target.closest('button'); if (!el) return;
   const cfg = S.data.cfg, n = myName(), person = cfg.people[n];
   if (el.dataset.go) return nav(el.dataset.go);
-  if (el.dataset.t) { S.tab = el.dataset.t; return renderEditor(); }
+  if (el.dataset.t) { S.tab = el.dataset.t; return el.dataset.t === 'today' ? render() : renderEditor(); }
   const a = el.dataset.a; if (!a) return;
   const card = el.closest('[data-d]'); const d = card ? +card.dataset.d : null;
   const reqs = R.weekReq(cfg, S.entry.loc, S.week);
@@ -319,6 +331,118 @@ async function nav(dir) {
   try { await load(w); S.entry = null; S.errors = []; render(); } catch (e) { toast(e.message); }
 }
 
+/* ---------- Hoy (solapa por defecto y pantalla general) ---------- */
+const nowUY = () => { const n = new Date(Date.now() - 3 * 3600e3); return n.getUTCHours() + n.getUTCMinutes() / 60; };
+const dmy = (iso) => `${+iso.slice(8)}/${iso.slice(5, 7)}`;
+async function loadToday(date) {
+  const week = mondayOf(date);
+  const [d, x] = await Promise.all([api('/api/state?week=' + week), api(`/api/extra?week=${week}&date=${date}`)]);
+  S.td = { date, week, data: d, extras: x.extras };
+}
+function todayLoc(loc) {
+  const { date, data } = S.td, cfg = data.cfg;
+  const dow = R.dowOf(date), req = R.dayReq(cfg, loc, date);
+  const isToday = date === R.todayUY(), now = nowUY();
+  const rows = Object.entries(data.entries).filter(([, e]) => e.loc === loc && e.days && e.days[dow]).map(([n, e]) => [n, e.days[dow], e.status]).sort((a, b) => a[1][0] - b[1][0]);
+  if (!rows.length && (!req || req.closed)) return '';
+  const H0 = Math.min(req && !req.closed ? req.open : 24, ...rows.map((r) => r[1][0]));
+  const H1 = Math.max(req && !req.closed ? req.close : 0, ...rows.map((r) => r[1][1]));
+  const W = Math.max(1, H1 - H0), pc = (h) => ((h - H0) / W) * 100;
+  const inNow = isToday ? rows.filter(([, s]) => s[0] <= now && now < s[1]).map((r) => r[0]) : [];
+  const gaps = R.gapsOf(cfg, loc, S.td.week, data.entries).filter((g) => g.dow === dow);
+  return `<section class="card"><div class="row sb"><h2>${esc(cfg.locs[loc].name)}</h2><span class="mono small mut">${req && !req.closed ? `abre ${fmt(req.open)} · cierra ${fmt(req.close)}` : 'sin requisitos cargados'}</span></div>
+    ${isToday ? `<p style="margin-top:6px">${inNow.length ? `<b>Ahora en el local:</b> ${inNow.map(esc).join(', ')}` : '<span class="mut">Ahora no hay nadie de turno.</span>'}</p>` : ''}
+    ${rows.length ? `<div class="tl">${rows.map(([n, s, st]) => {
+      const cls = isToday ? (now >= s[1] ? 'done' : now >= s[0] ? 'now' : '') : '';
+      return `<div class="nm">${esc(n)}${st !== 'confirmed' ? '<small>sin confirmar</small>' : ''}</div><div class="track"><div class="sg ${cls}" style="left:${pc(s[0])}%;width:${pc(s[1]) - pc(s[0])}%">${rng(s)}</div>${isToday && now >= H0 && now <= H1 ? `<div class="nowline" style="left:${pc(now)}%"></div>` : ''}</div>`;
+    }).join('')}</div>` : '<p class="mut" style="margin-top:8px">Nadie tiene turno cargado este día.</p>'}
+    ${req && !req.closed ? `<div style="margin-top:12px"><p class="small mut">Gente en el local por media hora</p>${strip(req, R.haveArr(data.entries, loc, dow), dow, null)}</div>
+      ${gaps.length ? `<p class="gaptxt">Falta gente: ${gaps.map((g) => `${fmt(g.from)}–${fmt(g.to)} (${g.missing})`).join(' · ')}</p>` : '<p class="gaptxt ok">Día cubierto.</p>'}` : ''}
+  </section>`;
+}
+function extraForm() {
+  const cfg = S.td.data.cfg, team = S.role === 'team';
+  const me = team ? null : cfg.people[S.name];
+  const locs = team ? Object.keys(cfg.locs) : me.locs;
+  const maxD = R.todayUY(), minD = addDays(maxD, -14);
+  return `<section class="card"><h2>Registrar horas extra</h2>
+    <p class="small mut" style="margin:4px 0 12px">Anotá las horas que trabajaste fuera de tu turno. Martín las revisa y las aprueba.</p>
+    <div class="form2">
+      ${team ? `<div class="field"><label for="xn">Quién sos</label><select id="xn"><option value="">Elegí</option>${Object.keys(cfg.people).map((n) => `<option>${esc(n)}</option>`).join('')}</select></div>
+      <div class="field"><label for="xp">Tu PIN</label><input id="xp" type="password" inputmode="numeric" maxlength="4" class="pin" autocomplete="off"></div>` : ''}
+      <div class="field"><label for="xd">Día</label><input id="xd" type="date" min="${minD}" max="${maxD}" value="${S.td.date <= maxD ? S.td.date : maxD}"></div>
+      ${locs.length > 1 ? `<div class="field"><label for="xl">Local</label><select id="xl">${locs.map((l) => `<option value="${l}">${esc(cfg.locs[l].name)}</option>`).join('')}</select></div>` : `<input type="hidden" id="xl" value="${locs[0]}">`}
+      <div class="field"><label for="xf">Desde</label><select id="xf">${timeOptions(6, 23.5, 18)}</select></div>
+      <div class="field"><label for="xt">Hasta</label><select id="xt">${timeOptions(6.5, 24, 19)}</select></div>
+      <div class="field full"><label for="xr">Motivo</label><input id="xr" type="text" maxlength="200" placeholder="Ej.: cubrí a Tomi, mucha gente al cierre, inventario"></div>
+    </div>
+    <p id="xe" class="small" style="color:var(--bad);min-height:20px"></p>
+    <button class="btn pri" id="xsend" style="width:100%">Registrar horas extra</button></section>`;
+}
+function extraList() {
+  const xs = S.td.extras || [];
+  const team = S.role === 'team';
+  const pill = (st) => `<span class="pill ${st === 'aprobada' ? 'ok' : st === 'rechazada' ? 'bad' : 'warn'}">${st}</span>`;
+  return `<section class="card"><h3>${team ? `Horas extra registradas el ${dmy(S.td.date)}` : 'Mis horas extra de esta semana'}</h3>
+    ${xs.length ? xs.map((x) => `<div class="xrow"><div><b>${esc(x.name)}</b> <span class="mono small">${dmy(x.date)} · ${fmt(x.from)}–${fmt(x.to)} · ${fmtH(x.hours)}</span>${x.reason ? `<br><span class="small mut">${esc(x.reason)}</span>` : ''}</div>${pill(x.status)}</div>`).join('') : '<p class="mut small" style="margin-top:6px">Todavía no hay registros.</p>'}</section>`;
+}
+async function renderToday() {
+  if (!S.td) await loadToday(R.todayUY());
+  const { date, data } = S.td, cfg = data.cfg;
+  const team = S.role === 'team';
+  const locs = team ? Object.keys(cfg.locs) : cfg.people[S.name].locs;
+  const isToday = date === R.todayUY();
+  const t = new Date(Date.now() - 3 * 3600e3);
+  app.innerHTML = `${team ? '' : `<div class="tabs"><button data-t="today" aria-selected="true">Hoy</button><button data-t="mine" aria-selected="false">Mi semana</button><button data-t="team" aria-selected="false">Todo el equipo</button></div>`}
+    <div class="daynav"><button data-day="-1" aria-label="Día anterior">‹</button><div class="t"><b>${isToday ? 'Hoy' : DAYS[R.dowOf(date)]} ${dmy(date)}</b><span class="small mut">${isToday ? DAYS[R.dowOf(date)] + ' · ' : ''}actualizado ${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}</span></div><button data-day="1" aria-label="Día siguiente">›</button></div>
+    ${!isToday ? '<p style="margin:-4px 0 12px;text-align:center"><button class="btn sm" data-day="0">Volver a hoy</button></p>' : ''}
+    ${locs.map(todayLoc).join('') || '<div class="card"><p class="mut">Ningún local tiene horarios ni requisitos cargados este día.</p></div>'}
+    ${extraForm()}${extraList()}`;
+}
+async function todayClick(ev) {
+  const el = ev.target.closest('button'); if (!el) return;
+  try {
+    if (el.dataset.t) { S.tab = el.dataset.t; return render(); }
+    if (el.dataset.day !== undefined) {
+      const d = +el.dataset.day;
+      await loadToday(d === 0 ? R.todayUY() : addDays(S.td.date, d));
+      return renderToday();
+    }
+    if (el.id === 'xsend') {
+      const v = (id) => $('#' + id) && $('#' + id).value;
+      const body = { date: v('xd'), loc: v('xl'), from: +v('xf'), to: +v('xt'), reason: v('xr') };
+      if (S.role === 'team') { body.name = v('xn'); body.pin = v('xp'); if (!body.name) return ($('#xe').textContent = 'Elegí quién sos.'); }
+      el.disabled = true;
+      await api('/api/extra', { body });
+      toast('Horas extra registradas. Martín las va a revisar.');
+      await loadToday(S.td.date); renderToday();
+    }
+  } catch (e) { if ($('#xe')) $('#xe').textContent = e.message; else toast(e.message); el.disabled = false; }
+}
+let todayTimer;
+function startTodayRefresh() {
+  clearInterval(todayTimer);
+  todayTimer = setInterval(async () => {
+    const busy = document.activeElement && ['INPUT', 'SELECT'].includes(document.activeElement.tagName);
+    if (busy || !S.td || document.hidden) return;
+    try { await loadToday(S.td.date === R.todayUY() ? R.todayUY() : S.td.date); if ((S.role === 'team' || S.tab === 'today') && !S.who) renderToday(); } catch {}
+  }, 5 * 60 * 1000);
+}
+
+/* ---------- Horas extra en el panel ---------- */
+let xWeek = null;
+async function adminExtras() {
+  xWeek = xWeek || mondayOf(R.todayUY());
+  const { extras } = await api('/api/extra?week=' + xWeek);
+  const by = {};
+  for (const x of extras) { by[x.name] = by[x.name] || { aprobada: 0, pendiente: 0, rechazada: 0 }; by[x.name][x.status] += x.hours; }
+  const pill = (st) => `<span class="pill ${st === 'aprobada' ? 'ok' : st === 'rechazada' ? 'bad' : 'warn'}">${st}</span>`;
+  return `<div class="weeknav"><button data-xw="-7" aria-label="Semana anterior">‹</button><div class="t">${weekLabel(xWeek)}</div><button data-xw="7" aria-label="Semana siguiente">›</button></div>
+    ${Object.keys(by).length ? `<div class="card"><h3>Totales de la semana</h3><div class="scroll"><table><thead><tr><th>Persona</th><th>Aprobadas</th><th>Pendientes</th><th>Rechazadas</th></tr></thead><tbody>${Object.entries(by).map(([n, t]) => `<tr><td><b>${esc(n)}</b></td><td class="mono">${t.aprobada} h</td><td class="mono">${t.pendiente} h</td><td class="mono">${t.rechazada} h</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+    <div class="card"><h2>Horas extra</h2>${extras.length ? extras.map((x) => `<div class="xrow"><div><b>${esc(x.name)}</b> <span class="mono small">${dmy(x.date)} · ${fmt(x.from)}–${fmt(x.to)} · ${fmtH(x.hours)}</span> ${pill(x.status)}<br><span class="small">${esc(x.reason)}</span><br><span class="small mut">Cargado por ${esc(x.by)}</span></div>
+      <div class="row" style="flex-wrap:nowrap">${x.status !== 'aprobada' ? `<button class="btn sm" data-xs="aprobada" data-id="${x.id}" data-date="${x.date}">Aprobar</button>` : ''}${x.status !== 'rechazada' ? `<button class="btn sm" data-xs="rechazada" data-id="${x.id}" data-date="${x.date}">Rechazar</button>` : ''}</div></div>`).join('') : '<p class="mut small" style="margin-top:6px">No hay horas extra registradas esta semana.</p>'}</div>`;
+}
+
 /* ---------- Panel de Martín ---------- */
 function statusOf(e) { return !e || !e.days.some(Boolean) ? 'none' : e.status; }
 function adminWeek() {
@@ -340,7 +464,7 @@ function adminWeek() {
 }
 let adminCfgDraft = null;
 async function adminTeam() {
-  const { cfg, hasPin } = await api('/api/admin?action=cfg');
+  const { cfg, hasPin, teamSet } = await api('/api/admin?action=cfg');
   adminCfgDraft = adminCfgDraft || JSON.parse(JSON.stringify(cfg));
   const c = adminCfgDraft;
   return `<div class="card"><h2>Equipo</h2><p class="small mut" style="margin:4px 0 10px">Horas por semana, locales donde trabaja, fecha de ingreso y hora máxima de salida (por ejemplo, para quien no puede cerrar).</p>
@@ -354,6 +478,7 @@ async function adminTeam() {
       <td><button class="btn sm" data-del="${esc(n)}" aria-label="Quitar ${esc(n)}">Quitar</button></td></tr>`).join('')}
     </tbody></table></div>
     <div class="row" style="margin-top:12px"><input id="newname" type="text" placeholder="Nombre nuevo" style="max-width:220px"><button class="btn" id="addp">Agregar persona</button><button class="btn pri" id="savecfg">Guardar equipo</button></div></div>
+    <div class="card"><h3>Pantalla general del local</h3><p class="small mut" style="margin:4px 0 10px">Es un código para dejar la app abierta en la tablet o PC del local: muestra quién trabaja hoy y deja registrar horas extra (cada uno con su PIN). No permite cambiar horarios.</p><p class="small" style="margin-bottom:10px">${teamSet ? '<span class="pill ok">código creado</span>' : '<span class="pill warn">todavía no hay código</span>'}</p><button class="btn" id="teamcode">${teamSet ? 'Cambiar código' : 'Crear código'}</button></div>
     <div class="card"><h3>Tu clave de administrador</h3><p class="small mut" style="margin:4px 0 10px">Es la que usás para entrar al panel. Se cambia desde acá, no hace falta tocar Vercel.</p><button class="btn" id="adminpin">Cambiar mi clave</button></div>`;
 }
 async function adminPeriods() {
@@ -373,10 +498,11 @@ async function adminLog() {
     <div class="scroll"><table><tbody>${log.map((l) => `<tr><td class="mono small">${new Date(l.at).toLocaleString('es-UY', { timeZone: 'America/Montevideo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td><td><b>${esc(l.name || '')}</b> ${label[l.type] || esc(l.type)}${l.week ? ` · semana ${esc(l.week.slice(8) + '/' + l.week.slice(5, 7))}` : ''}${l.forced ? ' <span class="pill bad">con faltantes</span>' : ''}${l.by && l.by !== l.name && l.name ? ` <span class="mut small">(por ${esc(l.by)})</span>` : ''}${l.days ? `<br><span class="mono small mut">${l.days.map((s, d) => `${DS[d]} ${s ? rng(s) : '—'}`).join(' · ')}</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
 async function adminView() {
-  const tabs = [['week', 'Semana'], ['team', 'Equipo'], ['per', 'Etapas'], ['log', 'Registro']];
+  const tabs = [['week', 'Semana'], ['extra', 'Horas extra'], ['team', 'Equipo'], ['per', 'Etapas'], ['log', 'Registro']];
   let inner = '';
   try {
     if (S.atab === 'week') inner = adminWeek();
+    else if (S.atab === 'extra') inner = await adminExtras();
     else if (S.atab === 'team') inner = await adminTeam();
     else if (S.atab === 'per') inner = await adminPeriods();
     else inner = await adminLog();
@@ -403,6 +529,9 @@ async function adminClick(ev) {
     }
     if (el.dataset.pin) return askStaffPin(el.dataset.pin);
     if (el.id === 'adminpin') return changeAdminPin();
+    if (el.id === 'teamcode') return setTeamCode();
+    if (el.dataset.xw) { xWeek = addDays(xWeek, +el.dataset.xw); return render(); }
+    if (el.dataset.xs) { await api('/api/extra', { body: { action: 'status', id: el.dataset.id, date: el.dataset.date, status: el.dataset.xs } }); toast(el.dataset.xs === 'aprobada' ? 'Aprobada.' : 'Rechazada.'); return render(); }
     if (el.dataset.del) { if (!el.dataset.sure) { el.dataset.sure = 1; el.textContent = '¿Seguro?'; return; } delete adminCfgDraft.people[el.dataset.del]; return render(); }
     if (el.id === 'addp') { const n = $('#newname').value.trim(); if (!n) return; if (adminCfgDraft.people[n]) return toast('Ya existe.'); adminCfgDraft.people[n] = { locs: [Object.keys(adminCfgDraft.locs)[0]], hours: 44 }; return render(); }
     if (el.id === 'savecfg') { readTeam(); await api('/api/admin', { body: { action: 'saveCfg', cfg: adminCfgDraft } }); adminCfgDraft = null; toast('Equipo guardado.'); return render(); }
@@ -432,12 +561,20 @@ async function render() {
   app.onclick = app.onchange = app.onkeydown = null;
   if (!S.token) return loginView();
   try {
-    if (!S.data) await load(S.week);
-    else if (!S.week) await load();
+    if (S.role !== 'team') {
+      if (!S.data) await load(S.week);
+      else if (!S.week) await load();
+    }
     if (S.role === 'admin' && !S.who) {
       await adminView();
       app.onclick = adminClick;
       app.onchange = (ev) => { if (ev.target.id === 'aloc') { S.loc = ev.target.value; render(); } };
+      return;
+    }
+    if (S.role === 'team' || (S.role === 'staff' && S.tab === 'today')) {
+      await renderToday();
+      app.onclick = todayClick;
+      startTodayRefresh();
       return;
     }
     if (S.role === 'staff' && !S.entry) S.loc = null;

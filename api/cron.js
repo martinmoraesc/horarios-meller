@@ -14,11 +14,12 @@ export default async function handler(req, res) {
     const thisMon = mondayOf(todayUY());
     const week = kind === 'archive' ? thisMon : addDays(thisMon, 7);
     const entries = await hgetall('week:' + week);
-    if (kind === 'archive') await setJSON('archive:' + week, { savedAt: new Date().toISOString(), entries });
+    const extras = Object.values(await hgetall('extra:' + week));
+    if (kind === 'archive') await setJSON('archive:' + week, { savedAt: new Date().toISOString(), entries, extras });
     const nextWeek = addDays(week, 7);
-    const s = weekSummary(cfg, kind === 'archive' ? week : week, entries);
+    const s = weekSummary(cfg, week, entries, extras);
     const subject = kind === 'archive' ? `Cierre de la semana del ${week.slice(8)}/${week.slice(5, 7)}` : `Semana que viene: ${s.missing.length} sin cargar, faltan ${s.gapH} h`;
-    await sendMail({ subject, html: s.html, text: s.text, csv: weekCsv(cfg, week, entries), csvName: `horarios-${week}.csv` });
+    await sendMail({ subject, html: s.html, text: s.text, csv: weekCsv(cfg, week, entries, extras), csvName: `horarios-${week}.csv` });
     await logEvent({ type: 'cron-' + kind, week });
     json(res, 200, { ok: true, kind, week, nextWeek });
   } catch (e) { json(res, 500, { error: e.message }); }
