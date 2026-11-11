@@ -106,23 +106,23 @@ async function loginView() {
         <button class="btn pri" id="go" style="width:100%">${admin && !adminSet ? 'Crear clave y entrar' : 'Entrar'}</button>
         ${pick && !hasPin[pick] ? '<p class="small mut" style="margin-top:8px">Todavía no tenés PIN: pedíselo a Martín.</p>' : ''}
       </div>
-      <div class="row" style="margin-top:18px"><button class="btn sm" id="tm">${team ? 'Volver' : 'Pantalla general del local'}</button><button class="btn sm" id="adm">${admin ? 'Volver' : 'Soy Martín (administrador)'}</button></div>`;
+      <div class="row" style="margin-top:18px"><button class="btn sm" id="tm">Pantalla general del local</button><button class="btn sm" id="adm">${admin ? 'Volver' : 'Soy Martín'}</button></div>`;
     $('#pin') && ($('#pin').focus());
   };
   draw();
   const go = async () => {
-    $('#err').textContent = '';
+    if ($('#err')) $('#err').textContent = '';
     try {
-      const r = await api('/api/login', { body: team ? { team: true, pin: $('#pin').value } : admin ? (adminSet ? { admin: true, pin: $('#pin').value } : { setup: true, pin: $('#pin').value, pin2: $('#pin2').value }) : { name: pick, pin: $('#pin').value } });
+      const r = await api('/api/login', { body: team ? { team: true } : admin ? (adminSet ? { admin: true, pin: $('#pin').value } : { setup: true, pin: $('#pin').value, pin2: $('#pin2').value }) : { name: pick, pin: $('#pin').value } });
       Object.assign(S, { token: r.token, role: r.role, name: r.name });
       try { localStorage.setItem('hm', JSON.stringify({ token: r.token, role: r.role, name: r.name })); } catch {}
       S.week = null; S.data = null; S.entry = null; S.who = null; render();
-    } catch (e) { $('#err').textContent = e.message; }
+    } catch (e) { team = false; if ($('#err')) $('#err').textContent = e.message; else toast(e.message); }
   };
   app.onclick = (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
     if (b.dataset.n) { pick = b.dataset.n; admin = false; team = false; draw(); }
-    else if (b.id === 'tm') { team = !team; admin = false; pick = null; draw(); }
+    else if (b.id === 'tm') { team = true; go(); }
     else if (b.id === 'go') go();
     else if (b.id === 'adm') { admin = !admin; team = false; pick = null; draw(); }
   };
@@ -478,7 +478,6 @@ async function adminTeam() {
       <td><button class="btn sm" data-del="${esc(n)}" aria-label="Quitar ${esc(n)}">Quitar</button></td></tr>`).join('')}
     </tbody></table></div>
     <div class="row" style="margin-top:12px"><input id="newname" type="text" placeholder="Nombre nuevo" style="max-width:220px"><button class="btn" id="addp">Agregar persona</button><button class="btn pri" id="savecfg">Guardar equipo</button></div></div>
-    <div class="card"><h3>Pantalla general del local</h3><p class="small mut" style="margin:4px 0 10px">Es un código para dejar la app abierta en la tablet o PC del local: muestra quién trabaja hoy y deja registrar horas extra (cada uno con su PIN). No permite cambiar horarios.</p><p class="small" style="margin-bottom:10px">${teamSet ? '<span class="pill ok">código creado</span>' : '<span class="pill warn">todavía no hay código</span>'}</p><button class="btn" id="teamcode">${teamSet ? 'Cambiar código' : 'Crear código'}</button></div>
     <div class="card"><h3>Tu clave de administrador</h3><p class="small mut" style="margin:4px 0 10px">Es la que usás para entrar al panel. Se cambia desde acá, no hace falta tocar Vercel.</p><button class="btn" id="adminpin">Cambiar mi clave</button></div>`;
 }
 async function adminPeriods() {
@@ -498,7 +497,8 @@ async function adminLog() {
     <div class="scroll"><table><tbody>${log.map((l) => `<tr><td class="mono small">${new Date(l.at).toLocaleString('es-UY', { timeZone: 'America/Montevideo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td><td><b>${esc(l.name || '')}</b> ${label[l.type] || esc(l.type)}${l.week ? ` · semana ${esc(l.week.slice(8) + '/' + l.week.slice(5, 7))}` : ''}${l.forced ? ' <span class="pill bad">con faltantes</span>' : ''}${l.by && l.by !== l.name && l.name ? ` <span class="mut small">(por ${esc(l.by)})</span>` : ''}${l.days ? `<br><span class="mono small mut">${l.days.map((s, d) => `${DS[d]} ${s ? rng(s) : '—'}`).join(' · ')}</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
 async function adminView() {
-  const tabs = [['week', 'Semana'], ['extra', 'Horas extra'], ['team', 'Equipo'], ['per', 'Etapas'], ['log', 'Registro']];
+  const tabs = [['week', 'Semana'], ['extra', 'Horas extra'], ['team', 'Equipo']];
+  const minor = [['per', 'Etapas'], ['log', 'Registro']];
   let inner = '';
   try {
     if (S.atab === 'week') inner = adminWeek();
@@ -507,7 +507,7 @@ async function adminView() {
     else if (S.atab === 'per') inner = await adminPeriods();
     else inner = await adminLog();
   } catch (e) { inner = `<div class="card"><p>${esc(e.message)}</p></div>`; }
-  app.innerHTML = `<h1 style="margin-bottom:12px">Panel</h1><div class="tabs">${tabs.map(([k, v]) => `<button data-at="${k}" aria-selected="${S.atab === k}">${v}</button>`).join('')}</div>${inner}`;
+  app.innerHTML = `<h1 style="margin-bottom:12px">Panel</h1><div class="tabs admintabs">${tabs.map(([k, v]) => `<button data-at="${k}" aria-selected="${S.atab === k}">${v}</button>`).join('')}<span class="tabs-minor">${minor.map(([k, v]) => `<button class="minor" data-at="${k}" aria-selected="${S.atab === k}">${v}</button>`).join('')}</span></div>${inner}`;
 }
 function pinModal(name, pin) {
   const m = document.createElement('div'); m.className = 'modal';
@@ -529,7 +529,6 @@ async function adminClick(ev) {
     }
     if (el.dataset.pin) return askStaffPin(el.dataset.pin);
     if (el.id === 'adminpin') return changeAdminPin();
-    if (el.id === 'teamcode') return setTeamCode();
     if (el.dataset.xw) { xWeek = addDays(xWeek, +el.dataset.xw); return render(); }
     if (el.dataset.xs) { await api('/api/extra', { body: { action: 'status', id: el.dataset.id, date: el.dataset.date, status: el.dataset.xs } }); toast(el.dataset.xs === 'aprobada' ? 'Aprobada.' : 'Rechazada.'); return render(); }
     if (el.dataset.del) { if (!el.dataset.sure) { el.dataset.sure = 1; el.textContent = '¿Seguro?'; return; } delete adminCfgDraft.people[el.dataset.del]; return render(); }

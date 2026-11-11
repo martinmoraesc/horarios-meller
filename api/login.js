@@ -19,10 +19,7 @@ export default async function handler(req, res) {
       return json(res, 200, { token: sign({ role: 'admin', name: 'Martín' }), role: 'admin', name: 'Martín' });
     }
     if (b.team) {
-      if ((await throttle('team')) > 15) return json(res, 429, { error: 'Demasiados intentos. Probá en 15 minutos.' });
-      if (!cfg.teamHash) return json(res, 403, { error: 'Martín todavía no creó el código del equipo.' });
-      if (!safeEq(hashPin('__team__', pin), cfg.teamHash)) return json(res, 401, { error: 'Código incorrecto.' });
-      await clearThrottle('team');
+      // Pantalla general del local: sin código. Solo muestra el día y permite registrar horas extra con nombre + PIN.
       return json(res, 200, { token: sign({ role: 'team', name: 'Pantalla general' }, 120), role: 'team', name: 'Pantalla general' });
     }
     if (b.admin) {

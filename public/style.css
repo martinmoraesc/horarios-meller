@@ -94,3 +94,8 @@ th{font:600 11px var(--f-b);text-transform:uppercase;letter-spacing:.06em;color:
 .xrow:last-child{border-bottom:0}
 .form2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .form2 .full{grid-column:1/-1}
+
+.admintabs{align-items:center;flex-wrap:wrap;overflow:visible}
+.tabs-minor{margin-left:auto;display:flex;gap:4px;padding-left:8px}
+.tabs .minor{padding:5px 10px;font-size:12px;font-weight:500;color:var(--mut);background:transparent}
+.tabs .minor[aria-selected=true]{background:var(--fg);color:var(--bg)}
